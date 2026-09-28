@@ -1,37 +1,28 @@
 # Weather Station
 
-## Program Operation Concept
+Python application that retrieves current weather measurements from the Institute of Meteorology and Water Management (IMGW) API, processes the data, and stores it in a MySQL database.
 
-The aim of the program is to populate the `WEATHER_IN_POLAND` table with data regarding weather measurements provided by the Institute of Meteorology and Water Management (IMGW). The program is developed in Python using MySQL queries.</br>
-</br>
-Upon execution, the program communicates with the IMGW API, retrieves data from the moment of invocation, processes it accordingly, and then populates the database. The program's functionality has been tested on a MySQL database within a Docker environment.
+## How It Works
 
-## Program Execution
+The application retrieves XML weather data from the IMGW API and processes measurements for stations across Poland. The processed records are stored in the `POGODA_W_POLSCE` table.
 
-To execute the program, run the file `createAndPopulateWeatherMeasurement.py`.
+Duplicate measurements are skipped based on station ID, measurement date, and measurement hour.
 
-## Installation of Necessary Libraries
+The application also calculates the difference between the measured atmospheric pressure and the standard pressure of 1013.25 hPa.
 
-To install the necessary libraries, use the command:
+## Architecture
 
-```shell
-pip install -r requirements.txt
-
+```text
+IMGW API
+   ↓
+Python
+   ↓
+XML parsing
+   ↓
+Data transformation
+   ↓
+MySQL
 ```
-
-or optionally
-
-```shell
-pip3 install -r requirements.txt
-
-```
-
-## Environmental Variables
-
-To configure the database connection, you should:
-
-- Copy the .env.example file and save it as .env.
-- Set the appropriate database access details.
 
 ## Tech Stack
 
@@ -39,16 +30,94 @@ To configure the database connection, you should:
 - MySQL
 - Docker
 - IMGW API
+- XML
 - Environment variables
-
-## Architecture
-
-IMGW API → Python data processing → MySQL database
 
 ## What I Implemented
 
-- API data retrieval from IMGW
-- Data processing and database insertion
-- MySQL integration
+- Retrieval of weather measurements from the IMGW API
+- XML parsing and data transformation
+- MySQL database integration
+- Automatic table creation
+- Duplicate-record prevention
 - Environment-based configuration
-- Testing with MySQL running in Docker
+- Basic error handling for API and database failures
+- Local MySQL environment using Docker Compose
+
+## Data Stored
+
+For each weather station, the application stores:
+
+- Station ID and name
+- Measurement date and hour
+- Temperature
+- Wind speed and direction
+- Relative humidity
+- Precipitation
+- Atmospheric pressure
+- Difference from the standard pressure of 1013.25 hPa
+
+## Setup
+
+### 1. Clone the repository
+
+```shell
+git clone https://github.com/bkulpa/weather-station-program-operation.git
+cd weather-station-program-operation
+```
+
+### 2. Create the environment file
+
+Copy the example configuration:
+
+```shell
+cp .env.example .env
+```
+
+The default example values are ready to work with the included Docker Compose configuration.
+
+### 3. Start MySQL with Docker
+
+```shell
+docker compose up -d
+```
+
+### 4. Install Python dependencies
+
+```shell
+pip install -r requirements.txt
+```
+
+### 5. Run the application
+
+```shell
+python createAndPopulateWeatherMeasurement.py
+```
+
+## Configuration
+
+The application uses the following environment variables:
+
+```text
+DB_HOST
+DB_USER
+DB_PASSWORD
+DB_DATABASE
+API_URL
+```
+
+See `.env.example` for a working local-development example.
+
+## Project Structure
+
+```text
+.
+├── createAndPopulateWeatherMeasurement.py
+├── services
+│   ├── apiClientService.py
+│   └── dbClientService.py
+├── docker-compose.yml
+├── requirements.txt
+├── .env.example
+└── README.md
+```
