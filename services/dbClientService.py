@@ -1,20 +1,17 @@
-# Import bibliotek
-import mysql.connector
 import os
 
-# Połączenie z bazą danych
-def getDataBaseInstance():
-    # Blok try-except mający na celu zapobieganie całkowitego zatrzymania się serwisu i wyświetleniu komunikatów w przypadku wystąpienia błędów
+import mysql.connector
+
+
+def get_database_instance():
+    """Create and return a MySQL database connection."""
     try:
-        dbInstance = mysql.connector.connect(
-            host = os.getenv("DB_HOST"),
-            user = os.getenv("DB_USER"),
-            password = os.getenv("DB_PASSWORD"),
-            database = os.getenv("DB_DATABASE")
+        return mysql.connector.connect(
+            host=os.getenv("DB_HOST"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            database=os.getenv("DB_DATABASE"),
         )
-
-    # Błąd związany z biblioteką mysql.connector - na przykład błąd połączenia z bazą danych
     except mysql.connector.Error as error:
-        print(f"Błąd MySQL: {error}")
-
-    return dbInstance
+        print(f"MySQL error: {error}")
+        return None

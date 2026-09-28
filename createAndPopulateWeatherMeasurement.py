@@ -1,44 +1,35 @@
-# Import bibliotek i serwisów
 from dotenv import load_dotenv
-import services.apiClientService as apiClientService
-import services.dbClientService as dbClientService
 
-# Wczytanie danych dostępowych do bazy danych z pliku .env
+import services.apiClientService as api_client_service
+import services.dbClientService as db_client_service
+
 load_dotenv()
 
-# Zapisanie sparsowanych danych z API do listy
-def parseMeasurement(measurement):
-        id_stacji = measurement.find("id_stacji").text
-        stacja = measurement.find("stacja").text
-        data_pomiaru = measurement.find("data_pomiaru").text
-        godzina_pomiaru = measurement.find("godzina_pomiaru").text
-        temperatura = measurement.find("temperatura").text
-        predkosc_wiatru = measurement.find("predkosc_wiatru").text
-        kierunek_wiatru = measurement.find("kierunek_wiatru").text
-        wilgotnosc_wzgledna = measurement.find("wilgotnosc_wzgledna").text
-        suma_opadu = measurement.find("suma_opadu").text
-        cisnienie = measurement.find("cisnienie").text
 
-        # Wyliczanie różnicy od ciśnienia wzorcowego (tylko jeśli pole cisnienie nie przyjmuje wartości NULL)
-        roznica_cisnien = 1013.25 - float(cisnienie) if cisnienie else None
+def parse_measurement(measurement):
+    """Convert one IMGW XML measurement into values ready for MySQL."""
+    pressure = measurement.find("cisnienie").text
 
-        return [
-            id_stacji,
-            stacja,
-            data_pomiaru,
-            godzina_pomiaru,
-            temperatura,
-            predkosc_wiatru,
-            kierunek_wiatru,
-            wilgotnosc_wzgledna,
-            suma_opadu,
-            cisnienie,
-            roznica_cisnien
-        ]
+    pressure_difference = 1013.25 - float(pressure) if pressure else None
 
-# Tworzenie tabeli, jeśli nie istnieje
-createTableQuery = """CREATE TABLE IF NOT EXISTS POGODA_W_POLSCE (
-    id INT unsigned NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    return [
+        measurement.find("id_stacji").text,
+        measurement.find("stacja").text,
+        measurement.find("data_pomiaru").text,
+        measurement.find("godzina_pomiaru").text,
+        measurement.find("temperatura").text,
+        measurement.find("predkosc_wiatru").text,
+        measurement.find("kierunek_wiatru").text,
+        measurement.find("wilgotnosc_wzgledna").text,
+        measurement.find("suma_opadu").text,
+        pressure,
+        pressure_difference,
+    ]
+
+
+CREATE_TABLE_QUERY = """
+CREATE TABLE IF NOT EXISTS POGODA_W_POLSCE (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     id_stacji INT,
     stacja VARCHAR(255),
     data_pomiaru DATE,
@@ -50,79 +41,85 @@ createTableQuery = """CREATE TABLE IF NOT EXISTS POGODA_W_POLSCE (
     suma_opadu FLOAT,
     cisnienie FLOAT,
     roznica_cisnien FLOAT
-);"""
+);
+"""
 
-#  Wstawienie rekordu do bazy danych (z pominięciem duplikatów)
-insertQuery = """INSERT INTO POGODA_W_POLSCE (
+INSERT_QUERY = """
+INSERT INTO POGODA_W_POLSCE (
     id_stacji,
-    stacja, 
+    stacja,
     data_pomiaru,
     godzina_pomiaru,
     temperatura,
     predkosc_wiatru,
     kierunek_wiatru,
-    wilgotnosc_wzgledna, 
+    wilgotnosc_wzgledna,
     suma_opadu,
     cisnienie,
     roznica_cisnien
-) SELECT * FROM (
-    SELECT 
-    %s as id_stacji,
-    %s as stacja,
-    %s as data_pomiaru,
-    %s as godzina_pomiaru,
-    %s as temperatura,
-    %s as predkosc_wiatru,
-    %s as kierunek_wiatru,
-    %s as wilgotnosc_wzgledna,
-    %s as suma_opadu,
-    %s as cisnienie,
-    %s as roznica_cisnien
-) AS tmp WHERE NOT EXISTS (
-    SELECT * 
-    FROM POGODA_W_POLSCE 
-    WHERE 
-        id_stacji = tmp.id_stacji AND
-        data_pomiaru = tmp.data_pomiaru AND
-        godzina_pomiaru = tmp.godzina_pomiaru
-);"""
+)
+SELECT * FROM (
+    SELECT
+        %s AS id_stacji,
+        %s AS stacja,
+        %s AS data_pomiaru,
+        %s AS godzina_pomiaru,
+        %s AS temperatura,
+        %s AS predkosc_wiatru,
+        %s AS kierunek_wiatru,
+        %s AS wilgotnosc_wzgledna,
+        %s AS suma_opadu,
+        %s AS cisnienie,
+        %s AS roznica_cisnien
+) AS tmp
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM POGODA_W_POLSCE
+    WHERE
+        id_stacji = tmp.id_stacji
+        AND data_pomiaru = tmp.data_pomiaru
+        AND godzina_pomiaru = tmp.godzina_pomiaru
+);
+"""
 
-# Utworzenie instancji połączenia z bazą danych
-db = dbClientService.getDataBaseInstance()
 
-# Blok try-except mający na celu zapobieganie całkowitego zatrzymania się programu i wyświetleniu komunikatów w przypadku wystąpienia błędów
-try:
+def main():
+    database = db_client_service.get_database_instance()
 
-    # Utworzenie kursora w celu połączenia i wykonywania poleceń na bazie danych
-    cursor = db.cursor()
+    if database is None:
+        return
 
-    # Wykonanie zapytania ze zmiennej createTableQuery
-    cursor.execute(createTableQuery)
+    cursor = None
 
-    # Wywołanie funkcji i przypisanie zwróconej wartości do zmiennej
-    foundMeasurement = apiClientService.getAndParseXmlData("/data/synop/format/xml")
+    try:
+        cursor = database.cursor()
+        cursor.execute(CREATE_TABLE_QUERY)
 
-    # Dodawanie rekordów ze sparsowanego XML
-    for measurement in foundMeasurement:
-        try:
-            parsedMeasurement = parseMeasurement(measurement)
+        measurements = api_client_service.get_and_parse_xml_data(
+            "/data/synop/format/xml"
+        )
 
-            # Wykonanie polecenia ze zmiennej insertQuery
-            cursor.execute(insertQuery, parsedMeasurement)            
+        for measurement in measurements:
+            try:
+                cursor.execute(INSERT_QUERY, parse_measurement(measurement))
+            except Exception as error:
+                print(f"Error while processing measurement: {error}")
 
-        # Błąd podczas dodawania rekordu do tabeli
-        except Exception as error:
-            print(f"Błąd podczas przetwarzania rekordu: {error}")
+        database.commit()
 
-    # Zatwierdzenie zmian w bazie danych
-    db.commit()
+    except Exception as error:
+        print(f"Application error: {error}")
 
-# Błąd niezwiązany z biblioteką mysql.connector - na przykład przy próbie dopisania rekordów do nieistniejącej tabeli
-except Exception as error:
-    print(f"Wystąpił błąd: {error}")
+        if database.is_connected():
+            database.rollback()
 
-# Zamknięcie połączenia z bazą danych
-finally:
-    if db.is_connected():
-        cursor.close()
-        db.close()
+    finally:
+        if cursor is not None:
+            cursor.close()
+
+        if database.is_connected():
+            database.close()
+
+
+if __name__ == "__main__":
+    main()
