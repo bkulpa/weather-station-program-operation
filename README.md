@@ -32,3 +32,23 @@ To configure the database connection, you should:
 
 - Copy the .env.example file and save it as .env.
 - Set the appropriate database access details.
+
+## Tech Stack
+
+- Python
+- MySQL
+- Docker
+- IMGW API
+- Environment variables
+
+## Architecture
+
+IMGW API → Python data processing → MySQL database
+
+## What I Implemented
+
+- API data retrieval from IMGW
+- Data processing and database insertion
+- MySQL integration
+- Environment-based configuration
+- Testing with MySQL running in Docker
