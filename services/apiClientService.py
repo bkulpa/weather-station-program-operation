@@ -1,28 +1,29 @@
-# Import bibliotek
 import os
 import urllib.request
 import xml.etree.ElementTree as ET
+from urllib.error import URLError
 
 STATUS_OK = 200
 
-# Pobieranie i parsowanie danych z API
-def getAndParseXmlData(path):
-    # Blok try-except mający na celu zapobieganie całkowitego zatrzymania się serwisu i wyświetleniu komunikatów w przypadku wystąpienia błędów
+
+def get_and_parse_xml_data(path):
+    """Retrieve XML data from the IMGW API and return measurement elements."""
+    api_url = os.getenv("API_URL")
+
+    if not api_url:
+        print("API error: API_URL environment variable is not configured.")
+        return []
+
     try:
-        # Pobieranie i parsowanie danych z API
-        xmlUrl = urllib.request.urlopen(os.getenv("API_URL") + path)
+        with urllib.request.urlopen(api_url + path, timeout=10) as response:
+            if response.getcode() != STATUS_OK:
+                raise ValueError(
+                    f"API returned HTTP status code {response.getcode()}."
+                )
 
-        # Sprawdzanie czy API zwraca status code 200
-        if xmlUrl.getcode() == STATUS_OK:
-            xmlAsString = xmlUrl.read()
-            xmlTree = ET.fromstring(xmlAsString)
-            foundMeasurement = xmlTree.findall("item")
-        else:
-            # Zwrócenie błędu zawierającego status code z API
-            raise ValueError(f'Błąd: API zwróciło kod stanu {xmlUrl.getcode()}')
+            xml_tree = ET.fromstring(response.read())
+            return xml_tree.findall("item")
 
-    # Błąd związany z API - na przykład w przypadku braku odpowiedzi z API
-    except Exception as error:
-        print(f"Wystąpił błąd API: {error}")
-
-    return foundMeasurement
+    except (URLError, ET.ParseError, ValueError) as error:
+        print(f"API error: {error}")
+        return []
